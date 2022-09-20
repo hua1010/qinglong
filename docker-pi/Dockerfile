@@ -1,0 +1,74 @@
+FROM docker.io/python:3.7-slim-stretch
+
+# https://opsx.alibaba.com/mirror
+# 使用阿里云镜像地址。修改debian apt 更新地址，pip 地址，设置时区。
+RUN echo  "deb http://mirrors.aliyun.com/debian/ stretch main non-free contrib\n\
+deb-src http://mirrors.aliyun.com/debian/ stretch main non-free contrib\n\
+deb http://mirrors.aliyun.com/debian-security stretch/updates main\n\
+deb-src http://mirrors.aliyun.com/debian-security stretch/updates main\n\
+deb http://mirrors.aliyun.com/debian/ stretch-updates main non-free contrib\n\
+deb-src http://mirrors.aliyun.com/debian/ stretch-updates main non-free contrib\n\
+deb http://mirrors.aliyun.com/debian/ stretch-backports main non-free contrib\n\
+deb-src http://mirrors.aliyun.com/debian/ stretch-backports main non-free contrib" > /etc/apt/sources.list && \
+echo  "[global]\n\
+trusted-host=mirrors.aliyun.com\n\
+index-url=http://mirrors.aliyun.com/pypi/simple" > /etc/pip.conf && \
+ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+RUN echo "rebuild docker @2022-01-12"
+#增加语言utf-8
+ENV LANG=zh_CN.UTF-8
+ENV LC_CTYPE=zh_CN.UTF-8
+ENV LC_ALL=C
+ENV PYTHONPATH=/data/stock
+
+# 增加 TensorFlow 的支持，使用最新的2.0 编写代码。目前还是使用 1.x 吧，还没有学明白。
+# RUN pip3 install tensorflow==2.0.0-rc1 keras
+# RUN pip3 install tensorflow keras sklearn
+
+# 设置 vim 的语言配置
+RUN mkdir -p /etc/vim/ && \
+    echo "set fileencodings=utf-8,ucs-bom,gb18030,gbk,gb2312,cp936" >> /etc/vim/vimrc && \
+    echo "set termencoding=utf-8" >> /etc/vim/vimrc && \
+    echo "set encoding=utf-8" >> /etc/vim/vimrc
+
+ENV PNPM_HOME=/root/.local/share/pnpm \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/share/pnpm:/root/.local/share/pnpm/global/5/node_modules:$PNPM_HOME \
+    LANG=zh_CN.UTF-8 \
+    SHELL=/bin/bash \
+    PS1="\u@\h:\w \$ " \
+    QL_DIR=/ql \
+    QL_BRANCH=develop
+
+WORKDIR /ql
+
+RUN apt-get update && apt-get install -y \
+    net-tools procps gcc make python3-dev default-libmysqlclient-dev libxml2-dev cron \
+    coreutils moreutils git curl wget tzdata perl openssl nginx jq
+RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - \
+    && apt-get install -y nodejs
+
+RUN git config --global user.email "qinglong@@users.noreply.github.com" \
+    && git config --global user.name "qinglong" \
+    && git config --global http.postBuffer 524288000 \
+    && npm install -g pnpm \
+    && pnpm add -g pm2 ts-node typescript tslib \
+    && git clone -b develop https://github.com/whyour/qinglong.git /ql \
+    && cd /ql \
+    && cp -f .env.example .env \
+    && chmod 777 /ql/shell/*.sh \
+    && chmod 777 /ql/docker-pi/*.sh \
+    && pnpm install --prod \
+    && rm -rf /root/.pnpm-store \
+    && rm -rf /root/.local/share/pnpm/store \
+    && rm -rf /root/.cache \
+    && rm -rf /root/.npm \
+    && git clone -b develop https://github.com/whyour/qinglong-static.git /static \
+    && mkdir -p /ql/static \
+    && cp -rf /static/* /ql/static \
+    && rm -rf /static \
+    && apt-get --purge remove -y gcc make python3-dev default-libmysqlclient-dev libxml2-dev && \
+    rm -rf /root/.cache/* && apt-get clean && apt-get autoremove -y
+    
+ENTRYPOINT ["./docker-pi/docker-entrypoint.sh"]
