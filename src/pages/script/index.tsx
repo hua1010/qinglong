@@ -37,36 +37,10 @@ import { history, useOutletContext, useLocation } from '@umijs/max';
 import { parse } from 'query-string';
 import { depthFirstSearch } from '@/utils';
 import { SharedContext } from '@/layouts';
+import useFilterTreeData from '@/hooks/useFilterTreeData';
+import { uniq } from 'lodash';
 
 const { Text } = Typography;
-
-function getFilterData(keyword: string, data: any) {
-  const expandedKeys: string[] = [];
-  if (keyword) {
-    const tree: any = [];
-    data.forEach((item: any) => {
-      if (item.title.toLocaleLowerCase().includes(keyword)) {
-        tree.push(item);
-      } else {
-        const children: any[] = [];
-        (item.children || []).forEach((subItem: any) => {
-          if (subItem.title.toLocaleLowerCase().includes(keyword)) {
-            children.push(subItem);
-          }
-        });
-        if (children.length > 0) {
-          tree.push({
-            ...item,
-            children,
-          });
-          expandedKeys.push(item.key);
-        }
-      }
-    });
-    return { tree, expandedKeys };
-  }
-  return { tree: data, expandedKeys };
-}
 
 const LangMap: any = {
   '.py': 'python',
@@ -78,11 +52,9 @@ const LangMap: any = {
 const Script = () => {
   const { headerStyle, isPhone, theme, socketMessage } =
     useOutletContext<SharedContext>();
-  const [title, setTitle] = useState('请选择脚本文件');
   const [value, setValue] = useState('请选择脚本文件');
-  const [select, setSelect] = useState<any>();
+  const [select, setSelect] = useState<string>('');
   const [data, setData] = useState<any[]>([]);
-  const [filterData, setFilterData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('');
   const [height, setHeight] = useState<number>();
@@ -99,10 +71,11 @@ const Script = () => {
     setLoading(true);
     request
       .get(`${config.apiPrefix}scripts`)
-      .then((data) => {
-        setData(data.data);
-        setFilterData(data.data);
-        initGetScript();
+      .then(({ code, data }) => {
+        if (code === 200) {
+          setData(data);
+          initGetScript();
+        }
       })
       .finally(() => setLoading(false));
   };
@@ -110,8 +83,10 @@ const Script = () => {
   const getDetail = (node: any) => {
     request
       .get(`${config.apiPrefix}scripts/${node.title}?path=${node.parent || ''}`)
-      .then((data) => {
-        setValue(data.data);
+      .then(({ code, data }) => {
+        if (code === 200) {
+          setValue(data);
+        }
       });
   };
 
@@ -132,20 +107,22 @@ const Script = () => {
   };
 
   const onSelect = (value: any, node: any) => {
+    setSelect(node.key);
+    setCurrentNode(node);
+
     if (node.key === select || !value) {
       return;
     }
-    setValue('加载中...');
+
+    if (node.type === 'directory') {
+      setValue('请选择脚本文件');
+      return;
+    }
+
     const newMode = value ? LangMap[value.slice(-3)] : '';
     setMode(isPhone && newMode === 'typescript' ? 'javascript' : newMode);
-    setSelect(node.key);
-    setTitle(node.key);
-    setCurrentNode(node);
+    setValue('加载中...');
     getDetail(node);
-  };
-
-  const onExpand = (expKeys: any) => {
-    setExpandedKeys(expKeys);
   };
 
   const onTreeSelect = useCallback(
@@ -178,21 +155,29 @@ const Script = () => {
       const keyword = e.target.value;
       debounceSearch(keyword);
     },
-    [data, setFilterData],
+    [data],
   );
 
   const debounceSearch = useCallback(
     debounce((keyword) => {
       setSearchValue(keyword);
-      const { tree, expandedKeys } = getFilterData(
-        keyword.toLocaleLowerCase(),
-        data,
-      );
-      setExpandedKeys(expandedKeys);
-      setFilterData(tree);
     }, 300),
-    [data, setFilterData],
+    [data],
   );
+
+  const { treeData: filterData, keys: searchExpandedKeys } = useFilterTreeData(
+    data,
+    searchValue,
+    { treeNodeFilterProp: 'title' },
+  );
+
+  useEffect(() => {
+    setExpandedKeys(uniq([...expandedKeys, ...searchExpandedKeys]));
+  }, [searchExpandedKeys]);
+
+  const onExpand = (expKeys: any) => {
+    setExpandedKeys(expKeys);
+  };
 
   const editFile = () => {
     setTimeout(() => {
@@ -231,13 +216,11 @@ const Script = () => {
                 content,
               },
             })
-            .then((_data: any) => {
-              if (_data.code === 200) {
+            .then(({ code, data }) => {
+              if (code === 200) {
                 message.success(`保存成功`);
                 setValue(content);
                 setIsEditing(false);
-              } else {
-                message.error(_data);
               }
               resolve(null);
             })
@@ -255,10 +238,11 @@ const Script = () => {
       title: `确认删除`,
       content: (
         <>
-          确认删除文件
+          确认删除
           <Text style={{ wordBreak: 'break-all' }} type="warning">
             {select}
-          </Text>{' '}
+          </Text>
+          文件{currentNode.type === 'directory' ? '夹及其子文件' : ''}
           ，删除后不可恢复
         </>
       ),
@@ -268,24 +252,18 @@ const Script = () => {
             data: {
               filename: currentNode.title,
               path: currentNode.parent || '',
+              type: currentNode.type,
             },
           })
-          .then((_data: any) => {
-            if (_data.code === 200) {
+          .then(({ code }) => {
+            if (code === 200) {
               message.success(`删除成功`);
               let newData = [...data];
               if (currentNode.parent) {
-                const parentNodeIndex = newData.findIndex(
-                  (x) => x.key === currentNode.parent,
+                newData = depthFirstSearch(
+                  newData,
+                  (c) => c.key === currentNode.key,
                 );
-                const parentNode = newData[parentNodeIndex];
-                const index = parentNode.children.findIndex(
-                  (y) => y.key === currentNode.key,
-                );
-                if (index !== -1 && parentNodeIndex !== -1) {
-                  parentNode.children.splice(index, 1);
-                  newData.splice(parentNodeIndex, 1, { ...parentNode });
-                }
               } else {
                 const index = newData.findIndex(
                   (x) => x.key === currentNode.key,
@@ -295,8 +273,7 @@ const Script = () => {
                 }
               }
               setData(newData);
-            } else {
-              message.error(_data);
+              initState();
             }
           });
       },
@@ -346,30 +323,35 @@ const Script = () => {
           filename: currentNode.title,
         },
       })
-      .then((_data: any) => {
-        const blob = new Blob([_data], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = currentNode.title;
-        document.documentElement.appendChild(a);
-        a.click();
-        document.documentElement.removeChild(a);
+      .then(({ code, data }) => {
+        if (code === 200) {
+          const blob = new Blob([data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = currentNode.title;
+          document.documentElement.appendChild(a);
+          a.click();
+          document.documentElement.removeChild(a);
+        }
       });
   };
 
-  useEffect(() => {
-    const word = searchValue || '';
-    const { tree } = getFilterData(word.toLocaleLowerCase(), data);
-    setFilterData(tree);
-  }, [data]);
+  const initState = () => {
+    setSelect('');
+    setCurrentNode(null);
+    setValue('请选择脚本文件');
+  };
 
   useEffect(() => {
     getScripts();
-    if (treeDom && treeDom.current) {
+  }, []);
+
+  useEffect(() => {
+    if (treeDom.current) {
       setHeight(treeDom.current.clientHeight);
     }
-  }, []);
+  }, [treeDom.current, data]);
 
   const action = (key: string | number) => {
     switch (key) {
@@ -438,19 +420,22 @@ const Script = () => {
   return (
     <PageContainer
       className="ql-container-wrapper log-wrapper"
-      title={title}
+      title={select}
       loading={loading}
       extra={
         isPhone
           ? [
               <TreeSelect
+                treeExpandAction="click"
                 className="log-select"
                 value={select}
                 dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
                 treeData={data}
                 placeholder="请选择脚本"
-                fieldNames={{ value: 'key', label: 'title' }}
+                fieldNames={{ value: 'key' }}
+                treeNodeFilterProp="title"
                 showSearch
+                allowClear
                 onSelect={onSelect}
               />,
               <Dropdown overlay={menu} trigger={['click']}>
@@ -506,6 +491,7 @@ const Script = () => {
     >
       <div className={`${styles['log-container']} log-container`}>
         {!isPhone && (
+          /*// @ts-ignore*/
           <SplitPane split="vertical" size={200} maxSize={-100}>
             <div className={styles['left-tree-container']}>
               {data.length > 0 ? (
@@ -518,6 +504,7 @@ const Script = () => {
                   ></Input.Search>
                   <div className={styles['left-tree-scroller']} ref={treeDom}>
                     <Tree
+                      expandAction="click"
                       className={styles['left-tree']}
                       treeData={filterData}
                       showIcon={true}
@@ -554,7 +541,6 @@ const Script = () => {
                 readOnly: !isEditing,
                 fontSize: 12,
                 lineNumbersMinChars: 3,
-                folding: false,
                 glyphMargin: false,
               }}
               onMount={(editor) => {

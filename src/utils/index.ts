@@ -150,9 +150,9 @@ export default function browserType() {
     shell === 'none'
       ? {}
       : {
-          shell, // wechat qq uc 360 2345 sougou liebao maxthon
-          shellVs,
-        },
+        shell, // wechat qq uc 360 2345 sougou liebao maxthon
+        shellVs,
+      },
   );
 
   console.log(
@@ -188,8 +188,8 @@ export function getTableScroll({
   if (id) {
     tHeader = document.getElementById(id)
       ? document
-          .getElementById(id)!
-          .getElementsByClassName('ant-table-thead')[0]
+        .getElementById(id)!
+        .getElementsByClassName('ant-table-thead')[0]
       : null;
   } else {
     tHeader = document.querySelector('.ant-table-wrapper');
@@ -244,7 +244,7 @@ export function exportJson(name: string, data: string) {
 
 export function depthFirstSearch<
   T extends Record<string, any> & { children?: T[] },
->(children: T[], condition: (column: T) => boolean, item: T) {
+>(children: T[], condition: (column: T) => boolean, item?: T) {
   const c = [...children];
   const keys = [];
 
@@ -252,6 +252,11 @@ export function depthFirstSearch<
     if (!cls) return;
     for (let i = 0; i < cls?.length; i++) {
       if (condition(cls[i])) {
+        if (!item) {
+          cls.splice(i, 1);
+          return;
+        }
+
         if (cls[i].children) {
           cls[i].children!.unshift(item);
         } else {
@@ -266,6 +271,5 @@ export function depthFirstSearch<
     }
   })(c);
 
-  console.log(keys);
   return c;
 }

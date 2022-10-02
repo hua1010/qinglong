@@ -56,7 +56,7 @@ export default {
       value: 'scripts',
     },
     {
-      name: '任务日志',
+      name: '日志管理',
       value: 'logs',
     },
     {
@@ -74,7 +74,7 @@ export default {
     subscriptions: '订阅管理',
     configs: '配置文件',
     scripts: '脚本管理',
-    logs: '任务日志',
+    logs: '日志管理',
     dependencies: '依赖管理',
     system: '系统信息',
   },
@@ -92,6 +92,7 @@ export default {
     { value: 'pushPlus', label: 'PushPlus' },
     { value: 'chat', label: '群辉chat' },
     { value: 'email', label: '邮箱' },
+    { value: 'webhook', label: '自定义通知' },
     { value: 'closed', label: '已关闭' },
   ],
   notificationModeMap: {
@@ -205,7 +206,7 @@ export default {
     pushPlus: [
       {
         label: 'pushPlusToken',
-        tip: '微信扫码登录后一对一推送或一对多推送下面的token(您的Token)，不提供PUSH_PLUS_USER则默认为一对一推送',
+        tip: '微信扫码登录后一对一推送或一对多推送下面的token(您的Token)，不提供PUSH_PLUS_USER则默认为一对一推送，参考 https://www.pushplus.plus/',
         required: true,
       },
       {
@@ -222,6 +223,36 @@ export default {
       { label: 'emailUser', tip: '邮箱地址', required: true },
       { label: 'emailPass', tip: '邮箱SMTP授权码', required: true },
     ],
+    webhook: [
+      {
+        label: 'webhookMethod',
+        tip: '请求方法',
+        required: true,
+        items: [{ value: 'GET' }, { value: 'POST' }, { value: 'PUT' }],
+      },
+      {
+        label: 'webhookContentType',
+        tip: '请求头Content-Type',
+        required: true,
+        items: [{ value: 'application/json' }, { value: 'multipart/form-data' }, { value: 'application/x-www-form-urlencoded' }],
+      },
+      {
+        label: 'webhookUrl',
+        tip: '请求链接以http或者https开头。url或者body中必须包含$title，$content可选，对应api内容的位置',
+        required: true,
+        placeholder: 'https://xxx.cn/api?content=$title\n',
+      },
+      {
+        label: 'webhookHeaders',
+        tip: '请求头格式Custom-Header1: Header1，多个换行分割',
+        placeholder: 'Custom-Header1: Header1\nCustom-Header2: Header2',
+      },
+      {
+        label: 'webhookBody',
+        tip: '请求体格式key1: value1，多个换行分割。url或者body中必须包含$title，$content可选，对应api内容的位置',
+        placeholder: 'key1: $title\nkey2: $content',
+      },
+    ],
   },
   documentTitleMap: {
     '/login': '登录',
@@ -232,7 +263,7 @@ export default {
     '/config': '配置文件',
     '/script': '脚本管理',
     '/diff': '对比工具',
-    '/log': '任务日志',
+    '/log': '日志管理',
     '/setting': '系统设置',
     '/error': '错误日志',
   },
